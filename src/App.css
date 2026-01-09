@@ -1,0 +1,208 @@
+/* Estilos Generales y Reset */
+:root {
+  --primary-color: #2c3e50;
+  --accent-color: #667eea;
+  --background-bg: #f5f5f5;
+  --text-color: #333;
+  --sidebar-width: 260px;
+}
+
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Sidebar Navigation */
+.main-nav {
+  width: var(--sidebar-width);
+  background: var(--primary-color);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s ease;
+  z-index: 1000;
+  flex-shrink: 0;
+}
+
+.nav-header {
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.nav-header h1 {
+  font-size: 1.25rem;
+  margin: 0;
+  font-weight: 600;
+}
+
+.toggle-sidebar {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: none; /* Oculto en desktop por defecto */
+}
+
+.nav-links {
+  flex: 1;
+  padding: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow-y: auto;
+}
+
+.nav-links button {
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 1.5rem;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.8);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.95rem;
+}
+
+.nav-links button:hover {
+  background: rgba(255,255,255,0.1);
+  color: white;
+  padding-left: 1.75rem;
+}
+
+.nav-links button.active {
+  background: linear-gradient(90deg, var(--accent-color) 0%, rgba(102,126,234,0.5) 100%);
+  color: white;
+  border-left: 4px solid white;
+}
+
+.nav-footer {
+  padding: 1rem;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  background: rgba(0,0,0,0.1);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.2);
+}
+
+.user-name { font-weight: bold; font-size: 0.9rem; }
+.user-email { font-size: 0.75rem; opacity: 0.7; }
+
+.btn-logout {
+  width: 100%;
+  padding: 0.5rem;
+  background: rgba(255,59,48,0.2);
+  color: #ff6b6b;
+  border: 1px solid rgba(255,59,48,0.3);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* Main Content Area */
+.main-content {
+  flex: 1;
+  padding: 2rem;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--background-bg);
+  width: 100%; /* Asegura que no se desborde */
+}
+
+/* Utilities */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 1rem;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px; /* Fuerza el scroll horizontal en pantallas pequeñas */
+}
+
+th, td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+/* Badges */
+.badge { padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600; display: inline-block; }
+.badge.paid { background: #e8f5e9; color: #2e7d32; }
+.badge.partial { background: #fff3e0; color: #e65100; }
+.badge.unpaid { background: #ffebee; color: #c62828; }
+
+/* Responsive Media Queries */
+@media (max-width: 768px) {
+  .toggle-sidebar {
+    display: block; /* Mostrar botón hamburguesa */
+  }
+
+  .app-container {
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  .main-nav {
+    width: 100%;
+    position: relative;
+    height: auto;
+    flex-shrink: 0;
+  }
+  
+  /* Cuando está cerrado en móvil, ocultamos links y footer */
+  .main-nav.closed .nav-links,
+  .main-nav.closed .nav-footer {
+    display: none;
+  }
+  
+  .main-nav.open {
+    height: auto;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  }
+
+  .main-content {
+    padding: 1rem;
+    height: auto; /* Dejar que fluya */
+    min-height: calc(100vh - 60px); 
+    overflow-y: visible; /* Scroll nativo del body */
+  }
+
+  /* Ajustes para tarjetas en lugar de tablas si es necesario, 
+     pero usando scroll horizontal es un buen inicio */
+  
+  .sales-page {
+    padding: 1rem !important;
+  }
+
+  .form {
+    padding: 1rem !important;
+  }
+
+  /* Grid de productos en 1 columna */
+  .products-selector {
+    grid-template-columns: 1fr !important;
+  }
+}
