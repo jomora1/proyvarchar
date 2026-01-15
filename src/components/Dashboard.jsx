@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { getCurrentUser } from '../services/authService'
 import { getPurchasesSummary } from '../services/purchaseService'
 import { formatCurrency } from '../utils/helpers'
+import logo from '../assets/logo.png'
 
 export default function Dashboard({ onNavigate }) {
   const [user, setUser] = useState(null)
@@ -30,8 +31,11 @@ export default function Dashboard({ onNavigate }) {
   return (
     <div className="dashboard">
       <div className="welcome-banner">
-        <h1>👋 Hola, {user?.displayName}</h1>
-        <p>Bienvenido al sistema de gestión de inventario</p>
+        <div className="banner-content">
+          <h1>👋 Hola, {user?.displayName}</h1>
+          <p>Bienvenido al sistema de gestión de inventario</p>
+        </div>
+        <img src={logo} alt="Logo" className="banner-logo" />
       </div>
 
       <div className="dashboard-grid">
@@ -96,6 +100,18 @@ export default function Dashboard({ onNavigate }) {
           border-radius: 12px;
           margin-bottom: 2rem;
           box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .banner-logo {
+          height: 100px;
+          width: auto;
+          mix-blend-mode: multiply; /* Optional: might help blend if logo has white bg */
+          background: white;
+          padding: 10px;
+          border-radius: 8px;
         }
 
         .welcome-banner h1 {

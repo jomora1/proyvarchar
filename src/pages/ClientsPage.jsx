@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { getClients, createClient, updateClient, getClientById, getClientHistory } from '../services/clientService'
-import { applyPaymentToSale } from '../services/paymentService'
+import { applyCascadingPayment } from '../services/paymentService'
 import { formatCurrency } from '../utils/helpers'
 import { auth } from '../firebase'
+import logo from '../assets/logo.png'
 
 export default function ClientsPage() {
   const [clients, setClients] = useState([])
@@ -107,7 +108,7 @@ export default function ClientsPage() {
   const handleProcessPayment = async (e) => {
     e.preventDefault()
 
-    if (!selectedSaleId || !paymentAmount || parseFloat(paymentAmount) <= 0) {
+    if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
       setError('Por favor ingrese un monto válido')
       return
     }
@@ -117,9 +118,13 @@ export default function ClientsPage() {
 
     try {
       const amount = parseFloat(paymentAmount)
-      const result = await applyPaymentToSale(selectedSaleId, amount, auth.currentUser?.uid)
+      const result = await applyCascadingPayment(paymentClient.id, amount, auth.currentUser?.uid, selectedSaleId)
 
-      setSuccessMessage(`¡Abono de ${formatCurrency(amount)} aplicado exitosamente! Nuevo saldo pendiente: ${formatCurrency(result.newPendingBalance)}`)
+      let message = `¡Abono de ${formatCurrency(result.totalApplied)} aplicado exitosamente!`
+      if (result.remainingBalance > 0) {
+        message += ` (Sobrante: ${formatCurrency(result.remainingBalance)})`
+      }
+      setSuccessMessage(message)
       setShowPaymentModal(false)
       setPaymentAmount('')
       setSelectedSaleId('')
@@ -147,7 +152,10 @@ export default function ClientsPage() {
 
   return (
     <div className="clients-page">
-      <h1>👥 Gestión de Clientes</h1>
+      <div className="header-container">
+        <img src={logo} alt="Logo Sharlyne Store" className="brand-logo" />
+        <h1>👥 Gestión de Clientes</h1>
+      </div>
 
       {error && <div className="error-message">{error}</div>}
       {successMessage && <div className="success-message">{successMessage}</div>}
@@ -235,8 +243,8 @@ export default function ClientsPage() {
                 <select
                   value={selectedSaleId}
                   onChange={(e) => setSelectedSaleId(e.target.value)}
-                  required
                 >
+                  <option value="">-- Aplicar a deuda más antigua (Automático) --</option>
                   {pendingSales.map(sale => (
                     <option key={sale.id} value={sale.id}>
                       Venta del {sale.date?.toDate?.()?.toLocaleDateString() || 'N/A'} -
@@ -257,7 +265,6 @@ export default function ClientsPage() {
                   type="number"
                   step="0.01"
                   min="0.01"
-                  max={getSelectedSalePending()}
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
                   placeholder="Ingrese el monto"
@@ -499,6 +506,23 @@ export default function ClientsPage() {
         .btn-primary:disabled {
           opacity: 0.5;
           cursor: not-allowed;
+        }
+
+        .header-container {
+          display: flex;
+          align-items: center;
+          gap: 1.5rem;
+          margin-bottom: 2rem;
+          background: white;
+          padding: 1rem 2rem;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .brand-logo {
+          height: 80px;
+          width: auto;
+          object-fit: contain;
         }
       `}</style>
     </div>

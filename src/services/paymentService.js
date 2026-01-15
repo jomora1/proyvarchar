@@ -24,25 +24,25 @@ import {
 export const applyPaymentToSale = async (saleId, amountPaid, userId) => {
   const saleRef = doc(db, 'sales', saleId)
   const saleSnap = await getDoc(saleRef)
-  
+
   if (!saleSnap.exists()) throw new Error('Venta no encontrada')
 
   const sale = saleSnap.data()
-  
+
   // Validar que hay saldo pendiente
   const pendingBalance = sale.total - sale.paid
   if (pendingBalance <= 0) {
     throw new Error('La venta está completamente pagada')
   }
 
-  if (amountPaid > pendingBalance) {
+  if (amountPaid > pendingBalance + 0.01) {
     throw new Error(`El monto excede el saldo pendiente (₡${pendingBalance})`)
   }
 
   // Obtener items de la venta ordenados por precio
   const itemsQuery = query(collection(db, 'saleItems'), where('saleId', '==', saleId))
   const itemsSnap = await getDocs(itemsQuery)
-  
+
   const items = itemsSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
     .sort((a, b) => a.unitPrice - b.unitPrice)
@@ -105,4 +105,67 @@ export const getSalePayments = async (saleId) => {
 export const getPayments = async () => {
   const querySnapshot = await getDocs(collection(db, 'payments'))
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+}
+
+export const applyCascadingPayment = async (clientId, totalAmount, userId, prioritySaleId = null) => {
+  // 1. Obtener todas las ventas del cliente y filtrar en memoria
+  // Esto evita la necesidad de un índice compuesto (clientId + status) que puede dar error
+  const salesQuery = query(
+    collection(db, 'sales'),
+    where('clientId', '==', clientId)
+  )
+  const salesSnap = await getDocs(salesQuery)
+
+  // Filtrar pendientes y mapear datos
+  let pendingSales = salesSnap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(sale => sale.status !== 'paid' && (sale.total - sale.paid) > 0)
+
+  // 2. Ordenar: Prioridad > Más antiguas
+  pendingSales.sort((a, b) => {
+    if (prioritySaleId) {
+      if (a.id === prioritySaleId) return -1
+      if (b.id === prioritySaleId) return 1
+    }
+    // Ordenar por fecha (asumiendo que tiene campo date o createdAt)
+    const dateA = a.date?.toMillis ? a.date.toMillis() : 0
+    const dateB = b.date?.toMillis ? b.date.toMillis() : 0
+    return dateA - dateB
+  })
+
+  let remainingMoney = totalAmount
+  const results = []
+
+  // 3. Iterar y pagar en cascada
+  console.log(`[Payment] Starting distribution. Amount: ${totalAmount}, Pending Sales: ${pendingSales.length}`)
+
+  for (const sale of pendingSales) {
+    if (remainingMoney <= 0) break
+
+    const pendingBalance = sale.total - sale.paid
+    const paymentForSale = Math.min(remainingMoney, pendingBalance)
+
+    console.log(`[Payment] Processing Sale ${sale.id}. Pending: ${pendingBalance}, Paying: ${paymentForSale}`)
+
+    if (paymentForSale > 0) {
+      // Reutilizamos la lógica de aplicar pago a una venta individual
+      try {
+        const result = await applyPaymentToSale(sale.id, paymentForSale, userId)
+        results.push({
+          saleId: sale.id,
+          applied: paymentForSale,
+          ...result
+        })
+        remainingMoney -= paymentForSale
+      } catch (err) {
+        console.error(`Error applying payment to sale ${sale.id}:`, err)
+      }
+    }
+  }
+
+  return {
+    totalApplied: totalAmount - remainingMoney,
+    remainingBalance: remainingMoney, // Debería ser 0 si hay suficiente deuda
+    appliedTo: results
+  }
 }

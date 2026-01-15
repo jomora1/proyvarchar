@@ -28,88 +28,72 @@ export const getLastProfitCut = async () => {
 
   const cuts = querySnapshot.docs
     .map(doc => ({ id: doc.id, ...doc.data() }))
-    .sort((a, b) => b.date - a.date)
+    .sort((a, b) => {
+      const dateA = a.date?.toMillis ? a.date.toMillis() : (a.date instanceof Date ? a.date.getTime() : 0)
+      const dateB = b.date?.toMillis ? b.date.toMillis() : (b.date instanceof Date ? b.date.getTime() : 0)
+      return dateB - dateA
+    })
 
   return cuts[0]
 }
 
 export const createProfitCut = async (userId) => {
-  const lastCut = await getLastProfitCut()
-  const lastCutDate = lastCut ? lastCut.date.toDate() : new Date(0)
+  // 1. Obtener todos los productos para tener los costos a mano
+  const productsSnap = await getDocs(collection(db, 'products'))
+  const productsMap = {}
+  productsSnap.docs.forEach(doc => {
+    productsMap[doc.id] = doc.data()
+  })
 
-  // 1. Obtener todas las ventas con actividad reciente
-  const salesQuery = query(collection(db, 'sales'))
-  const salesSnap = await getDocs(salesQuery)
-
-  const relevantSales = salesSnap.docs
-    .map(doc => ({ id: doc.id, ...doc.data() }))
-    .filter(sale => {
-      const updatedAt = sale.updatedAt?.toDate ? sale.updatedAt.toDate() : (sale.updatedAt || new Date(0))
-      return updatedAt > lastCutDate
-    })
-
-  if (relevantSales.length === 0) {
-    throw new Error('No hay actividad reciente para generar un corte')
-  }
+  // 2. Obtener todos los items de venta (sin filtros de DB para evitar problemas de índices)
+  const itemsSnap = await getDocs(collection(db, 'saleItems'))
+  console.log('Total items fetched:', itemsSnap.size)
 
   let totalRevenue = 0
   let totalCost = 0
   let itemsCount = 0
-  const itemsToUpdate = [] // { id, saleId, newCutUnits, isFullyCut }
+  const itemsToUpdate = []
 
-  // 2. Iterar ventas y buscar UNIDADES pagadas pendientes de corte
-  for (const sale of relevantSales) {
-    const itemsQuery = query(collection(db, 'saleItems'), where('saleId', '==', sale.id))
-    const itemsSnap = await getDocs(itemsQuery)
+  for (const itemDoc of itemsSnap.docs) {
+    const item = { id: itemDoc.id, ...itemDoc.data() }
 
-    for (const itemDoc of itemsSnap.docs) {
-      const item = itemDoc.data()
+    // Filtro en memoria: ignorar items ya incluidos completamente en cortes
+    if (item.isCutIncluded === true) continue
 
-      // Datos actuales del item
-      const quantity = item.quantity
-      const unitPrice = item.unitPrice
-      const paidAmount = item.paid || 0
-      const previouslyCutUnits = item.cutUnits || 0
+    // Datos del item
+    const unitPrice = item.unitPrice || 0
+    if (unitPrice === 0) continue
 
-      // Calcular cuántas unidades están COMPLETAMENTE pagadas con el monto actual
-      // Ejemplo: 2 cremas @ 5500 = 11000. Pago 6000.
-      // paidUnits = floor(6000 / 5500) = 1 unidad.
-      const paidUnits = Math.floor(paidAmount / unitPrice)
+    const paidAmount = item.paid || 0
+    const previouslyCutUnits = item.cutUnits || 0
+    const quantity = item.quantity || 0
 
-      // Determinar cuántas de esas son NUEVAS para este corte
-      // newUnitsToCut = 1 - 0 (previos) = 1.
-      const newUnitsToCut = paidUnits - previouslyCutUnits
+    // Calcular cuántas unidades están COMPLETAMENTE pagadas
+    const paidUnits = Math.floor(paidAmount / unitPrice)
+    const newUnitsToCut = Math.min(paidUnits - previouslyCutUnits, quantity - previouslyCutUnits)
 
-      if (newUnitsToCut > 0) {
-        itemsCount += newUnitsToCut
+    if (newUnitsToCut > 0) {
+      itemsCount += newUnitsToCut
+      totalRevenue += (newUnitsToCut * unitPrice)
 
-        // Sumar ingresos solo por las unidades nuevas
-        totalRevenue += (newUnitsToCut * unitPrice)
-
-        // Sumar costos
-        const productRef = doc(db, 'products', item.productId)
-        const productSnap = await getDoc(productRef)
-
-        if (productSnap.exists()) {
-          const product = productSnap.data()
-          totalCost += (product.costPrice * newUnitsToCut)
-        }
-
-        const totalCutUnits = previouslyCutUnits + newUnitsToCut
-        const isFullyCut = totalCutUnits >= quantity
-
-        itemsToUpdate.push({
-          id: itemDoc.id,
-          saleId: sale.id,
-          newCutUnits: totalCutUnits,
-          isFullyCut
-        })
+      const product = productsMap[item.productId]
+      if (product) {
+        totalCost += (product.costPrice * newUnitsToCut)
       }
+
+      const totalCutUnits = previouslyCutUnits + newUnitsToCut
+      const isFullyCut = totalCutUnits >= quantity
+
+      itemsToUpdate.push({
+        id: item.id,
+        newCutUnits: totalCutUnits,
+        isFullyCut
+      })
     }
   }
 
   if (itemsCount === 0) {
-    throw new Error('No hay nuevas unidades completamente pagadas para incluir en el corte')
+    throw new Error('No se encontraron nuevos productos completamente pagados para incluir en un corte.')
   }
 
   const netProfit = totalRevenue - totalCost

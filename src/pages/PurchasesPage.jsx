@@ -3,329 +3,333 @@ import { getPurchases, createPurchase, getPurchasesSummary } from '../services/p
 import { getProducts } from '../services/productService'
 import { formatCurrency } from '../utils/helpers'
 import { auth } from '../firebase'
+import logo from '../assets/logo.png'
 
 export default function PurchasesPage() {
-    const [purchases, setPurchases] = useState([])
-    const [products, setProducts] = useState([])
-    const [summary, setSummary] = useState(null)
-    const [showForm, setShowForm] = useState(false)
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState('')
-    const [successMessage, setSuccessMessage] = useState('')
-    const [processing, setProcessing] = useState(false)
+  const [purchases, setPurchases] = useState([])
+  const [products, setProducts] = useState([])
+  const [summary, setSummary] = useState(null)
+  const [showForm, setShowForm] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+  const [processing, setProcessing] = useState(false)
 
-    // Estado del formulario
-    const [supplierName, setSupplierName] = useState('')
-    const [notes, setNotes] = useState('')
-    const [purchaseItems, setPurchaseItems] = useState([])
+  // Estado del formulario
+  const [supplierName, setSupplierName] = useState('')
+  const [notes, setNotes] = useState('')
+  const [purchaseItems, setPurchaseItems] = useState([])
 
-    // Estado para agregar items
-    const [selectedProductId, setSelectedProductId] = useState('')
-    const [quantity, setQuantity] = useState('')
-    const [unitCost, setUnitCost] = useState('')
+  // Estado para agregar items
+  const [selectedProductId, setSelectedProductId] = useState('')
+  const [quantity, setQuantity] = useState('')
+  const [unitCost, setUnitCost] = useState('')
 
-    useEffect(() => {
-        loadData()
-    }, [])
+  useEffect(() => {
+    loadData()
+  }, [])
 
-    const loadData = async () => {
-        try {
-            setLoading(true)
-            const [purchasesData, productsData, summaryData] = await Promise.all([
-                getPurchases(),
-                getProducts(),
-                getPurchasesSummary()
-            ])
-            setPurchases(purchasesData)
-            setProducts(productsData)
-            setSummary(summaryData)
-        } catch (err) {
-            setError(err.message)
-        } finally {
-            setLoading(false)
-        }
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      const [purchasesData, productsData, summaryData] = await Promise.all([
+        getPurchases(),
+        getProducts(),
+        getPurchasesSummary()
+      ])
+      setPurchases(purchasesData)
+      setProducts(productsData)
+      setSummary(summaryData)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAddItem = () => {
+    if (!selectedProductId || !quantity || !unitCost) {
+      setError('Complete todos los campos del producto')
+      return
     }
 
-    const handleAddItem = () => {
-        if (!selectedProductId || !quantity || !unitCost) {
-            setError('Complete todos los campos del producto')
-            return
-        }
+    const product = products.find(p => p.id === selectedProductId)
+    if (!product) return
 
-        const product = products.find(p => p.id === selectedProductId)
-        if (!product) return
+    // Verificar si ya existe el producto en la lista
+    const existingIndex = purchaseItems.findIndex(item => item.productId === selectedProductId)
 
-        // Verificar si ya existe el producto en la lista
-        const existingIndex = purchaseItems.findIndex(item => item.productId === selectedProductId)
-
-        if (existingIndex >= 0) {
-            // Actualizar cantidad existente
-            const updatedItems = [...purchaseItems]
-            updatedItems[existingIndex].quantity += parseInt(quantity)
-            updatedItems[existingIndex].unitCost = parseFloat(unitCost)
-            setPurchaseItems(updatedItems)
-        } else {
-            // Agregar nuevo item
-            setPurchaseItems([...purchaseItems, {
-                productId: selectedProductId,
-                productName: product.name,
-                productCode: product.code,
-                quantity: parseInt(quantity),
-                unitCost: parseFloat(unitCost)
-            }])
-        }
-
-        // Limpiar campos
-        setSelectedProductId('')
-        setQuantity('')
-        setUnitCost('')
-        setError('')
+    if (existingIndex >= 0) {
+      // Actualizar cantidad existente
+      const updatedItems = [...purchaseItems]
+      updatedItems[existingIndex].quantity += parseInt(quantity)
+      updatedItems[existingIndex].unitCost = parseFloat(unitCost)
+      setPurchaseItems(updatedItems)
+    } else {
+      // Agregar nuevo item
+      setPurchaseItems([...purchaseItems, {
+        productId: selectedProductId,
+        productName: product.name,
+        productCode: product.code,
+        quantity: parseInt(quantity),
+        unitCost: parseFloat(unitCost)
+      }])
     }
 
-    const handleRemoveItem = (index) => {
-        setPurchaseItems(purchaseItems.filter((_, i) => i !== index))
+    // Limpiar campos
+    setSelectedProductId('')
+    setQuantity('')
+    setUnitCost('')
+    setError('')
+  }
+
+  const handleRemoveItem = (index) => {
+    setPurchaseItems(purchaseItems.filter((_, i) => i !== index))
+  }
+
+  const calculateTotal = () => {
+    return purchaseItems.reduce((sum, item) => sum + (item.quantity * item.unitCost), 0)
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+
+    if (purchaseItems.length === 0) {
+      setError('Debe agregar al menos un producto')
+      return
     }
 
-    const calculateTotal = () => {
-        return purchaseItems.reduce((sum, item) => sum + (item.quantity * item.unitCost), 0)
+    setProcessing(true)
+    setError('')
+
+    try {
+      const result = await createPurchase({
+        supplierName,
+        items: purchaseItems,
+        notes
+      }, auth.currentUser?.uid)
+
+      setSuccessMessage(`¡Compra registrada exitosamente! Total: ${formatCurrency(result.totalAmount)} (${result.totalItems} unidades)`)
+
+      // Limpiar formulario
+      setShowForm(false)
+      setSupplierName('')
+      setNotes('')
+      setPurchaseItems([])
+
+      // Recargar datos
+      await loadData()
+
+      setTimeout(() => setSuccessMessage(''), 5000)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setProcessing(false)
     }
+  }
 
-    const handleSubmit = async (e) => {
-        e.preventDefault()
-
-        if (purchaseItems.length === 0) {
-            setError('Debe agregar al menos un producto')
-            return
-        }
-
-        setProcessing(true)
-        setError('')
-
-        try {
-            const result = await createPurchase({
-                supplierName,
-                items: purchaseItems,
-                notes
-            }, auth.currentUser?.uid)
-
-            setSuccessMessage(`¡Compra registrada exitosamente! Total: ${formatCurrency(result.totalAmount)} (${result.totalItems} unidades)`)
-
-            // Limpiar formulario
-            setShowForm(false)
-            setSupplierName('')
-            setNotes('')
-            setPurchaseItems([])
-
-            // Recargar datos
-            await loadData()
-
-            setTimeout(() => setSuccessMessage(''), 5000)
-        } catch (err) {
-            setError(err.message)
-        } finally {
-            setProcessing(false)
-        }
+  const handleProductSelect = (productId) => {
+    setSelectedProductId(productId)
+    const product = products.find(p => p.id === productId)
+    if (product && product.costPrice) {
+      setUnitCost(product.costPrice.toString())
     }
+  }
 
-    const handleProductSelect = (productId) => {
-        setSelectedProductId(productId)
-        const product = products.find(p => p.id === productId)
-        if (product && product.costPrice) {
-            setUnitCost(product.costPrice.toString())
-        }
-    }
+  if (loading) return <p>Cargando compras...</p>
 
-    if (loading) return <p>Cargando compras...</p>
+  return (
+    <div className="purchases-page">
+      <div className="header-container">
+        <img src={logo} alt="Logo Sharlyne Store" className="brand-logo" />
+        <h1>🛍️ Gestión de Compras</h1>
+      </div>
 
-    return (
-        <div className="purchases-page">
-            <h1>🛍️ Gestión de Compras</h1>
+      {error && <div className="error-message">{error}</div>}
+      {successMessage && <div className="success-message">{successMessage}</div>}
 
-            {error && <div className="error-message">{error}</div>}
-            {successMessage && <div className="success-message">{successMessage}</div>}
+      {/* Resumen */}
+      {summary && (
+        <div className="summary-cards">
+          <div className="summary-card">
+            <h3>📦 Total Compras</h3>
+            <p className="summary-value">{summary.totalPurchases}</p>
+          </div>
+          <div className="summary-card">
+            <h3>💰 Inversión Total</h3>
+            <p className="summary-value">{formatCurrency(summary.totalAmount)}</p>
+          </div>
+          <div className="summary-card">
+            <h3>📅 Este Mes</h3>
+            <p className="summary-value">{formatCurrency(summary.monthlyAmount)}</p>
+            <p className="summary-subtitle">{summary.monthlyPurchases} compras</p>
+          </div>
+        </div>
+      )}
 
-            {/* Resumen */}
-            {summary && (
-                <div className="summary-cards">
-                    <div className="summary-card">
-                        <h3>📦 Total Compras</h3>
-                        <p className="summary-value">{summary.totalPurchases}</p>
-                    </div>
-                    <div className="summary-card">
-                        <h3>💰 Inversión Total</h3>
-                        <p className="summary-value">{formatCurrency(summary.totalAmount)}</p>
-                    </div>
-                    <div className="summary-card">
-                        <h3>📅 Este Mes</h3>
-                        <p className="summary-value">{formatCurrency(summary.monthlyAmount)}</p>
-                        <p className="summary-subtitle">{summary.monthlyPurchases} compras</p>
-                    </div>
-                </div>
-            )}
+      <button
+        onClick={() => setShowForm(!showForm)}
+        className="btn-primary"
+      >
+        {showForm ? 'Cancelar' : '+ Nueva Compra'}
+      </button>
 
-            <button
-                onClick={() => setShowForm(!showForm)}
-                className="btn-primary"
-            >
-                {showForm ? 'Cancelar' : '+ Nueva Compra'}
-            </button>
+      {/* Formulario de nueva compra */}
+      {showForm && (
+        <form onSubmit={handleSubmit} className="purchase-form">
+          <h2>📝 Registrar Compra</h2>
 
-            {/* Formulario de nueva compra */}
-            {showForm && (
-                <form onSubmit={handleSubmit} className="purchase-form">
-                    <h2>📝 Registrar Compra</h2>
-
-                    <div className="form-section">
-                        <div className="form-group">
-                            <label>Proveedor:</label>
-                            <input
-                                type="text"
-                                value={supplierName}
-                                onChange={(e) => setSupplierName(e.target.value)}
-                                placeholder="Nombre del proveedor"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Agregar productos */}
-                    <div className="form-section">
-                        <h3>Agregar Productos</h3>
-                        <div className="add-item-row">
-                            <select
-                                value={selectedProductId}
-                                onChange={(e) => handleProductSelect(e.target.value)}
-                            >
-                                <option value="">Seleccione un producto</option>
-                                {products.map(product => (
-                                    <option key={product.id} value={product.id}>
-                                        {product.code} - {product.name} (Stock: {product.stock || 0})
-                                    </option>
-                                ))}
-                            </select>
-                            <input
-                                type="number"
-                                min="1"
-                                value={quantity}
-                                onChange={(e) => setQuantity(e.target.value)}
-                                placeholder="Cantidad"
-                            />
-                            <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={unitCost}
-                                onChange={(e) => setUnitCost(e.target.value)}
-                                placeholder="Costo unitario"
-                            />
-                            <button type="button" onClick={handleAddItem} className="btn-add">
-                                + Agregar
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Lista de items */}
-                    {purchaseItems.length > 0 && (
-                        <div className="items-list">
-                            <h3>Productos a Comprar</h3>
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Código</th>
-                                        <th>Producto</th>
-                                        <th>Cantidad</th>
-                                        <th>Costo Unit.</th>
-                                        <th>Subtotal</th>
-                                        <th>Acción</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {purchaseItems.map((item, index) => (
-                                        <tr key={index}>
-                                            <td>{item.productCode}</td>
-                                            <td>{item.productName}</td>
-                                            <td>{item.quantity}</td>
-                                            <td>{formatCurrency(item.unitCost)}</td>
-                                            <td>{formatCurrency(item.quantity * item.unitCost)}</td>
-                                            <td>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveItem(index)}
-                                                    className="btn-remove"
-                                                >
-                                                    ✕
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                                <tfoot>
-                                    <tr>
-                                        <td colSpan="4"><strong>TOTAL</strong></td>
-                                        <td colSpan="2"><strong>{formatCurrency(calculateTotal())}</strong></td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    )}
-
-                    <div className="form-group">
-                        <label>Notas:</label>
-                        <textarea
-                            value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
-                            placeholder="Observaciones adicionales..."
-                            rows="3"
-                        />
-                    </div>
-
-                    <button
-                        type="submit"
-                        className="btn-submit"
-                        disabled={processing || purchaseItems.length === 0}
-                    >
-                        {processing ? 'Procesando...' : `💾 Guardar Compra (${formatCurrency(calculateTotal())})`}
-                    </button>
-                </form>
-            )}
-
-            {/* Historial de compras */}
-            <div className="purchases-history">
-                <h2>📋 Historial de Compras</h2>
-                {purchases.length === 0 ? (
-                    <p className="no-data">No hay compras registradas</p>
-                ) : (
-                    <table className="purchases-table">
-                        <thead>
-                            <tr>
-                                <th>Fecha</th>
-                                <th>Proveedor</th>
-                                <th>Productos</th>
-                                <th>Unidades</th>
-                                <th>Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {purchases.map(purchase => (
-                                <tr key={purchase.id}>
-                                    <td>{purchase.date?.toLocaleDateString?.() || 'N/A'}</td>
-                                    <td>{purchase.supplierName}</td>
-                                    <td>
-                                        <ul className="items-mini-list">
-                                            {purchase.items?.map((item, i) => (
-                                                <li key={i}>{item.productName} x{item.quantity}</li>
-                                            ))}
-                                        </ul>
-                                    </td>
-                                    <td>{purchase.totalItems}</td>
-                                    <td><strong>{formatCurrency(purchase.totalAmount)}</strong></td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
+          <div className="form-section">
+            <div className="form-group">
+              <label>Proveedor:</label>
+              <input
+                type="text"
+                value={supplierName}
+                onChange={(e) => setSupplierName(e.target.value)}
+                placeholder="Nombre del proveedor"
+              />
             </div>
+          </div>
 
-            <style>{`
+          {/* Agregar productos */}
+          <div className="form-section">
+            <h3>Agregar Productos</h3>
+            <div className="add-item-row">
+              <select
+                value={selectedProductId}
+                onChange={(e) => handleProductSelect(e.target.value)}
+              >
+                <option value="">Seleccione un producto</option>
+                {products.map(product => (
+                  <option key={product.id} value={product.id}>
+                    {product.code} - {product.name} (Stock: {product.stock || 0})
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="Cantidad"
+              />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={unitCost}
+                onChange={(e) => setUnitCost(e.target.value)}
+                placeholder="Costo unitario"
+              />
+              <button type="button" onClick={handleAddItem} className="btn-add">
+                + Agregar
+              </button>
+            </div>
+          </div>
+
+          {/* Lista de items */}
+          {purchaseItems.length > 0 && (
+            <div className="items-list">
+              <h3>Productos a Comprar</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Producto</th>
+                    <th>Cantidad</th>
+                    <th>Costo Unit.</th>
+                    <th>Subtotal</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchaseItems.map((item, index) => (
+                    <tr key={index}>
+                      <td>{item.productCode}</td>
+                      <td>{item.productName}</td>
+                      <td>{item.quantity}</td>
+                      <td>{formatCurrency(item.unitCost)}</td>
+                      <td>{formatCurrency(item.quantity * item.unitCost)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(index)}
+                          className="btn-remove"
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan="4"><strong>TOTAL</strong></td>
+                    <td colSpan="2"><strong>{formatCurrency(calculateTotal())}</strong></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+
+          <div className="form-group">
+            <label>Notas:</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Observaciones adicionales..."
+              rows="3"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="btn-submit"
+            disabled={processing || purchaseItems.length === 0}
+          >
+            {processing ? 'Procesando...' : `💾 Guardar Compra (${formatCurrency(calculateTotal())})`}
+          </button>
+        </form>
+      )}
+
+      {/* Historial de compras */}
+      <div className="purchases-history">
+        <h2>📋 Historial de Compras</h2>
+        {purchases.length === 0 ? (
+          <p className="no-data">No hay compras registradas</p>
+        ) : (
+          <table className="purchases-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Proveedor</th>
+                <th>Productos</th>
+                <th>Unidades</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {purchases.map(purchase => (
+                <tr key={purchase.id}>
+                  <td>{purchase.date?.toLocaleDateString?.() || 'N/A'}</td>
+                  <td>{purchase.supplierName}</td>
+                  <td>
+                    <ul className="items-mini-list">
+                      {purchase.items?.map((item, i) => (
+                        <li key={i}>{item.productName} x{item.quantity}</li>
+                      ))}
+                    </ul>
+                  </td>
+                  <td>{purchase.totalItems}</td>
+                  <td><strong>{formatCurrency(purchase.totalAmount)}</strong></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <style>{`
         .purchases-page {
           padding: 2rem;
           max-width: 1200px;
@@ -580,12 +584,29 @@ export default function PurchasesPage() {
           font-weight: bold;
         }
 
+        .header-container {
+          display: flex;
+          align-items: center;
+          gap: 1.5rem;
+          margin-bottom: 2rem;
+          background: white;
+          padding: 1rem 2rem;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .brand-logo {
+          height: 80px;
+          width: auto;
+          object-fit: contain;
+        }
+
         @media (max-width: 768px) {
           .add-item-row {
             grid-template-columns: 1fr;
           }
         }
       `}</style>
-        </div>
-    )
+    </div>
+  )
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { getProfitCuts, createProfitCut } from '../services/profitCutService'
 import { formatCurrency, formatDate } from '../utils/helpers'
 import { auth } from '../firebase'
+import logo from '../assets/logo.png'
 
 export default function ProfitCutsPage() {
   const [cuts, setCuts] = useState([])
@@ -35,6 +36,7 @@ export default function ProfitCutsPage() {
       setError('')
       await loadCuts()
     } catch (err) {
+      console.error('Error creating profit cut:', err)
       setError(err.message)
     } finally {
       setCreatingCut(false)
@@ -45,7 +47,10 @@ export default function ProfitCutsPage() {
 
   return (
     <div className="profit-cuts-page">
-      <h1>💰 Cortes de Ganancias</h1>
+      <div className="header-container">
+        <img src={logo} alt="Logo Sharlyne Store" className="brand-logo" />
+        <h1>💰 Cortes de Ganancias</h1>
+      </div>
 
       {error && <div className="error-message">{error}</div>}
 
@@ -61,10 +66,10 @@ export default function ProfitCutsPage() {
         <p className="no-data">No hay cortes registrados. Crea el primer corte.</p>
       ) : (
         <div className="cuts-list">
-          {cuts.map(cut => (
+          {cuts.slice(0, 1).map(cut => (
             <div key={cut.id} className="cut-card">
               <div className="cut-header">
-                <h2>Corte #{cuts.indexOf(cut) + 1}</h2>
+                <h2>Corte #{cuts.length} (Último Corte)</h2>
                 <span className="cut-date">{formatDate(cut.date.toDate?.() || cut.date)}</span>
               </div>
 
@@ -237,6 +242,23 @@ export default function ProfitCutsPage() {
           padding: 1rem;
           border-radius: 4px;
           margin-bottom: 1rem;
+        }
+
+        .header-container {
+          display: flex;
+          align-items: center;
+          gap: 1.5rem;
+          margin-bottom: 2rem;
+          background: white;
+          padding: 1rem 2rem;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .brand-logo {
+          height: 80px;
+          width: auto;
+          object-fit: contain;
         }
       `}</style>
     </div>

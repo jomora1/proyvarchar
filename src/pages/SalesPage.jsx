@@ -4,6 +4,8 @@ import { getClients } from '../services/clientService'
 import { getProducts } from '../services/productService'
 import { formatCurrency } from '../utils/helpers'
 import { auth } from '../firebase'
+import * as XLSX from 'xlsx'
+import logo from '../assets/logo.png'
 
 export default function SalesPage() {
   const [sales, setSales] = useState([])
@@ -90,8 +92,8 @@ export default function SalesPage() {
 
     const total = calculateTotal()
 
-    if (formData.paymentType === 'partial' && !formData.amountPaid) {
-      setError('Ingresa el monto a pagar')
+    if (formData.paymentType === 'partial' && formData.amountPaid === '') {
+      setError('Ingresa el monto a pagar (puede ser 0)')
       return
     }
 
@@ -141,13 +143,35 @@ export default function SalesPage() {
     setSelectedSale(null)
   }
 
+  const exportToExcel = () => {
+    const data = sales.map(sale => {
+      const client = clients.find(c => c.id === sale.clientId)
+      return {
+        Fecha: new Date(sale.date.toDate?.() || sale.date).toLocaleString(),
+        Cliente: client?.name || 'Desconocido',
+        Total: sale.total,
+        Pagado: sale.paid,
+        Pendiente: sale.total - sale.paid,
+        Estado: sale.status === 'paid' ? 'Pagado' : 'Pendiente'
+      }
+    })
+
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Historial Ventas')
+    XLSX.writeFile(wb, 'Historial_Ventas_Sharlyne.xlsx')
+  }
+
   if (loading) return <p>Cargando ventas...</p>
 
   const total = calculateTotal()
 
   return (
     <div className="sales-page">
-      <h1>🛒 Registro de Ventas</h1>
+      <div className="header-container">
+        <img src={logo} alt="Logo Sharlyne Store" className="brand-logo" />
+        <h1>Sistema Inventario Sharlyne Store</h1>
+      </div>
 
       {error && <div className="error-message">{error}</div>}
 
@@ -279,7 +303,7 @@ export default function SalesPage() {
             </tr>
           </thead>
           <tbody>
-            {sales.map(sale => {
+            {sales.slice(0, 1).map(sale => { // Mostrar solo la última venta
               const client = clients.find(c => c.id === sale.clientId)
               const pending = sale.total - sale.paid
               return (
@@ -303,75 +327,83 @@ export default function SalesPage() {
             })}
           </tbody>
         </table>
+
+        <div className="export-section">
+          <button onClick={exportToExcel} className="btn-success">
+            📊 Exportar Historial Completo a Excel
+          </button>
+        </div>
       </div>
 
       {loadingDetails && <div className="loading-overlay">Cargando detalles...</div>}
 
-      {selectedSale && (
-        <div className="modal-backdrop" onClick={closeDetails}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Detalle de Venta</h2>
-              <button className="close-btn" onClick={closeDetails}>&times;</button>
-            </div>
-
-            <div className="modal-body">
-              <div className="sale-info-grid">
-                <div>
-                  <strong>Fecha:</strong> {new Date(selectedSale.date.toDate ? selectedSale.date.toDate() : selectedSale.date).toLocaleString()}
-                </div>
-                <div>
-                  <strong>Total:</strong> {formatCurrency(selectedSale.total)}
-                </div>
-                <div>
-                  <strong>Pagado:</strong> {formatCurrency(selectedSale.paid)}
-                </div>
-                <div>
-                  <strong>Pendiente:</strong> <span className={selectedSale.total - selectedSale.paid > 0 ? 'text-danger' : 'text-success'}>
-                    {formatCurrency(selectedSale.total - selectedSale.paid)}
-                  </span>
-                </div>
+      {
+        selectedSale && (
+          <div className="modal-backdrop" onClick={closeDetails}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Detalle de Venta</h2>
+                <button className="close-btn" onClick={closeDetails}>&times;</button>
               </div>
 
-              <h3>Degleso de Productos</h3>
-              <div className="table-responsive">
-                <table className="detail-table">
-                  <thead>
-                    <tr>
-                      <th>Producto</th>
-                      <th>Cant</th>
-                      <th>Precio U.</th>
-                      <th>Total</th>
-                      <th>Abonado</th>
-                      <th>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedSale.items.sort((a, b) => a.unitPrice - b.unitPrice).map((item, idx) => {
-                      const isPaid = item.pending === 0 || item.paid >= item.subtotal
-                      return (
-                        <tr key={idx} className={isPaid ? 'row-paid' : 'row-pending'}>
-                          <td>{item.productName}</td>
-                          <td>{item.quantity}</td>
-                          <td>{formatCurrency(item.unitPrice)}</td>
-                          <td>{formatCurrency(item.subtotal)}</td>
-                          <td>{formatCurrency(item.paid || 0)}</td>
-                          <td>
-                            {isPaid
-                              ? <span className="badge paid">Pagado</span>
-                              : <span className="badge partial">Pendiente ({formatCurrency(item.pending)})</span>
-                            }
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+              <div className="modal-body">
+                <div className="sale-info-grid">
+                  <div>
+                    <strong>Fecha:</strong> {new Date(selectedSale.date.toDate ? selectedSale.date.toDate() : selectedSale.date).toLocaleString()}
+                  </div>
+                  <div>
+                    <strong>Total:</strong> {formatCurrency(selectedSale.total)}
+                  </div>
+                  <div>
+                    <strong>Pagado:</strong> {formatCurrency(selectedSale.paid)}
+                  </div>
+                  <div>
+                    <strong>Pendiente:</strong> <span className={selectedSale.total - selectedSale.paid > 0 ? 'text-danger' : 'text-success'}>
+                      {formatCurrency(selectedSale.total - selectedSale.paid)}
+                    </span>
+                  </div>
+                </div>
+
+                <h3>Degleso de Productos</h3>
+                <div className="table-responsive">
+                  <table className="detail-table">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th>Cant</th>
+                        <th>Precio U.</th>
+                        <th>Total</th>
+                        <th>Abonado</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedSale.items.sort((a, b) => a.unitPrice - b.unitPrice).map((item, idx) => {
+                        const isPaid = item.pending === 0 || item.paid >= item.subtotal
+                        return (
+                          <tr key={idx} className={isPaid ? 'row-paid' : 'row-pending'}>
+                            <td>{item.productName}</td>
+                            <td>{item.quantity}</td>
+                            <td>{formatCurrency(item.unitPrice)}</td>
+                            <td>{formatCurrency(item.subtotal)}</td>
+                            <td>{formatCurrency(item.paid || 0)}</td>
+                            <td>
+                              {isPaid
+                                ? <span className="badge paid">Pagado</span>
+                                : <span className="badge partial">Pendiente ({formatCurrency(item.pending)})</span>
+                              }
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       <style>{`
         .sales-page {
@@ -615,7 +647,46 @@ export default function SalesPage() {
           border-radius: 30px;
           z-index: 2000;
         }
+
+        .header-container {
+          display: flex;
+          align-items: center;
+          gap: 1.5rem;
+          margin-bottom: 2rem;
+          background: white;
+          padding: 1rem 2rem;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .brand-logo {
+          height: 80px;
+          width: auto;
+          object-fit: contain;
+        }
+
+        .export-section {
+          margin-top: 2rem;
+          text-align: right;
+        }
+
+        .btn-success {
+          background-color: #217346; /* Color Excel */
+          color: white;
+          border: none;
+          padding: 0.75rem 1.5rem;
+          border-radius: 4px;
+          font-weight: bold;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .btn-success:hover {
+          background-color: #1e6b41;
+        }
       `}</style>
-    </div>
+    </div >
   )
 }

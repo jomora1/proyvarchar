@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { getProducts, createProduct, updateProduct, deleteProduct } from '../services/productService'
+import logo from '../assets/logo.png'
 
 export default function ProductsPage() {
   const [products, setProducts] = useState([])
@@ -61,7 +62,10 @@ export default function ProductsPage() {
 
   return (
     <div className="products-page">
-      <h1>📦 Gestión de Productos</h1>
+      <div className="header-container">
+        <img src={logo} alt="Logo Sharlyne Store" className="brand-logo" />
+        <h1>📦 Gestión de Productos</h1>
+      </div>
 
       {error && <div className="error-message">{error}</div>}
 
@@ -211,6 +215,23 @@ export default function ProductsPage() {
           padding: 1rem;
           border-radius: 4px;
           margin-bottom: 1rem;
+        }
+
+        .header-container {
+          display: flex;
+          align-items: center;
+          gap: 1.5rem;
+          margin-bottom: 2rem;
+          background: white;
+          padding: 1rem 2rem;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .brand-logo {
+          height: 80px;
+          width: auto;
+          object-fit: contain;
         }
       `}</style>
     </div>
